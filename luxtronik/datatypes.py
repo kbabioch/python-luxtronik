@@ -86,6 +86,12 @@ class Seconds(Base):
     measurement_type = "seconds"
 
 
+class Minutes(Base):
+    """MinutesSeconds datatype, converts from and to Minutes."""
+
+    measurement_type = "Minutes"
+
+
 class Pulses(Base):
     """Pulses datatype, converts from and to Pulses."""
 
