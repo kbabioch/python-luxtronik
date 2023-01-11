@@ -1,21 +1,44 @@
 """luxtonik heatpump interface."""
 # -*- coding: utf-8 -*-
+# region Imports
+from __future__ import annotations
 
 import logging
 import socket
 import struct
+import threading
+import time
 
 from luxtronik.calculations import Calculations
 from luxtronik.parameters import Parameters
 from luxtronik.visibilities import Visibilities
+# endregion Imports
 
 LOGGER = logging.getLogger("Luxtronik")
 
+def is_socket_closed(sock: socket.socket) -> bool:
+    try:
+        # this will try to read bytes without blocking and also without removing them from buffer (peek only)
+        data = sock.recv(16, socket.MSG_DONTWAIT | socket.MSG_PEEK)
+        if len(data) == 0:
+            return True
+    except BlockingIOError:
+        return False  # socket is open and reading from it would block
+    except ConnectionResetError:
+        return True  # socket was closed for some other reason
+    except Exception as err:
+        LOGGER.exception(
+            "Unexpected exception when checking if a socket is closed", exc_info=err
+        )
+        return False
+    return False
+
 
 class Luxtronik:
-    """main luxtronik class."""
+    """Main luxtronik class."""
 
     def __init__(self, host, port, safe=True):
+        self._lock = threading.Lock()
         self._host = host
         self._port = port
         self._socket = None
@@ -24,28 +47,44 @@ class Luxtronik:
         self.visibilities = Visibilities()
         self.read()
 
-    def _connect(self):
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.connect((self._host, self._port))
-        LOGGER.info("Connected to Luxtronik heatpump %s:%s", self._host, self._port)
-
-    def _disconnect(self):
-        self._socket.close()
-        LOGGER.info(
-            "Disconnected from Luxtronik heatpump  %s:%s", self._host, self._port
-        )
+    def __del__(self):
+        if self._socket is not None:
+            if not is_socket_closed(self._socket):
+                self._socket.close()
+            self._socket = None
+            LOGGER.info(
+                "Disconnected from Luxtronik heatpump %s:%s", self._host, self._port
+            )
 
     def read(self):
         """Read data from heatpump."""
-        self._connect()
-        self._read_parameters()
-        self._read_calculations()
-        self._read_visibilities()
-        self._disconnect()
+        self._read_write(write=False)
 
     def write(self):
         """Write patameter to heatpump."""
-        self._connect()
+        self._read_write(write=True)
+
+    def _read_write(self, write=False):
+        # Ensure only one socket operation at the same time
+        with self._lock:
+            is_none = self._socket is None
+            if is_none:
+                self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if is_none or is_socket_closed(self._socket):
+                self._socket.connect((self._host, self._port))
+                LOGGER.info(
+                    "Connected to Luxtronik heatpump %s:%s", self._host, self._port
+                )
+            if write:
+                return self._write()
+            self._read()
+
+    def _read(self):
+        self._read_parameters()
+        self._read_calculations()
+        self._read_visibilities()
+
+    def _write(self):
         for index, value in self.parameters.queue.items():
             if not isinstance(index, int) or not isinstance(value, int):
                 LOGGER.warning("Parameter id '%s' or value '%s' invalid!", index, value)
@@ -58,9 +97,14 @@ class Luxtronik:
             LOGGER.debug("Command %s", cmd)
             val = struct.unpack(">i", self._socket.recv(4))[0]
             LOGGER.debug("Value %s", val)
-        self._disconnect()
-        # flush queue after writing all values
+        # Flush queue after writing all values
         self.parameters.queue = {}
+        # Give the heatpump a short time to handle the value changes/calculations:
+        time.sleep(0.2)
+        # Read the new values based on our param changes:
+        self._read_parameters()
+        self._read_calculations()
+        self._read_visibilities()
 
     def _read_parameters(self):
         data = []
@@ -72,9 +116,9 @@ class Luxtronik:
         for _ in range(0, length):
             try:
                 data.append(struct.unpack(">i", self._socket.recv(4))[0])
-            except struct.error as e:
+            except struct.error as err:
                 # not logging this as error as it would be logged on every read cycle
-                LOGGER.debug(e)
+                LOGGER.debug(err)
         LOGGER.info("Read %d parameters", length)
         self.parameters.parse(data)
 
@@ -90,9 +134,9 @@ class Luxtronik:
         for _ in range(0, length):
             try:
                 data.append(struct.unpack(">i", self._socket.recv(4))[0])
-            except struct.error as e:
+            except struct.error as err:
                 # not logging this as error as it would be logged on every read cycle
-                LOGGER.debug(e)
+                LOGGER.debug(err)
         LOGGER.info("Read %d calculations", length)
         self.calculations.parse(data)
 
@@ -106,8 +150,8 @@ class Luxtronik:
         for _ in range(0, length):
             try:
                 data.append(struct.unpack(">b", self._socket.recv(1))[0])
-            except struct.error as e:
+            except struct.error as err:
                 # not logging this as error as it would be logged on every read cycle
-                LOGGER.debug(e)
+                LOGGER.debug(err)
         LOGGER.info("Read %d visibilities", length)
         self.visibilities.parse(data)
