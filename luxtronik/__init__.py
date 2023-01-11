@@ -15,6 +15,8 @@ from luxtronik.visibilities import Visibilities
 # endregion Imports
 
 LOGGER = logging.getLogger("Luxtronik")
+
+# Wait time (in seconds) after writing parameters to give controller some time to re-calculate values, etc.
 WAIT_TIME_WRITE_PARAMETER = 0.2
 
 def is_socket_closed(sock: socket.socket) -> bool:
