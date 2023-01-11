@@ -104,7 +104,7 @@ class Luxtronik:
         self.parameters.queue = {}
         # Give the heatpump a short time to handle the value changes/calculations
         time.sleep(WAIT_TIME_WRITE_PARAMETER)
-        # Read the new values based on our param changes
+        # Read the new values based on our parameter changes
         self._read_parameters()
         self._read_calculations()
         self._read_visibilities()
