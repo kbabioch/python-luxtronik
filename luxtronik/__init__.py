@@ -68,7 +68,24 @@ class Luxtronik:
         self._read_write(write=True)
 
     def _read_write(self, write=False):
-        # Ensure only one socket operation at the same time
+        """
+        Read and/or write value from and/or to heatpump.
+
+        This method is essentially a wrapper for the _read() and _write()
+        methods.
+
+        Locking is being used to ensure that only a single socket operation is
+        performed at any point in time. This helps to avoid issues with the
+        Luxtronik controller, which seems unstable otherwise.
+
+        If write is true, all parameters will be written to the heat pump
+        prior to reading back in all data from the heat pump. If write is
+        false, no data will be written, but all available data will be read
+        from the heat pump.
+
+        :param bool write Indicates whether parameters should be written to heat pump prior to reading in all available data from heatpump
+        """
+
         with self._lock:
             is_none = self._socket is None
             if is_none:
