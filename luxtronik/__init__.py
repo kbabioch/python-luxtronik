@@ -15,6 +15,7 @@ from luxtronik.visibilities import Visibilities
 # endregion Imports
 
 LOGGER = logging.getLogger("Luxtronik")
+WAIT_TIME_WRITE_PARAMETER = 0.2
 
 def is_socket_closed(sock: socket.socket) -> bool:
     try:
@@ -100,7 +101,7 @@ class Luxtronik:
         # Flush queue after writing all values
         self.parameters.queue = {}
         # Give the heatpump a short time to handle the value changes/calculations:
-        time.sleep(0.2)
+        time.sleep(WAIT_TIME_WRITE_PARAMETER)
         # Read the new values based on our param changes:
         self._read_parameters()
         self._read_calculations()
