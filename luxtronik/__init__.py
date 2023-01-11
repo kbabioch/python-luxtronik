@@ -64,7 +64,7 @@ class Luxtronik:
         self._read_write(write=False)
 
     def write(self):
-        """Write patameter to heatpump."""
+        """Write parameter to heatpump."""
         self._read_write(write=True)
 
     def _read_write(self, write=False):
